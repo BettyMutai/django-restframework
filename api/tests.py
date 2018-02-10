@@ -6,6 +6,7 @@ from .models import Bucketlist
 from rest_framework.test import APIClient
 from rest_framework import status
 from django.core.urlresolvers import reverse
+from django.contrib.auth.models import User
 
 # Create your tests here.
 class ModelTestCase(TestCase):
@@ -13,8 +14,9 @@ class ModelTestCase(TestCase):
 
     def setUp(self):
         """Define the test client and other test variables."""
-        self.bucketlist_name = "Write world class code"
-        seld.bucketlist = Bucketlist(name=self.bucketlist_name)
+        user = User.objects.create(username="nerd")
+        self.name = "Write world class code"
+        seld.bucketlist = Bucketlist(name=self.name, owner=user)
 
     def test_model_can_create_a_bucketlist(self):
         """Test the bucketlist model can create a bucketlist."""
@@ -28,8 +30,14 @@ class ViewTestCase(TestCase):
 
     def setUp(self):
         """Define the test client and other test variable."""
+        user = User.objects.create(username="nerd")
+
+        #initialize client and force it to use authentication
         self.client = APIClients()
-        self.bucketlist_data = {'name': 'Go to Ibiza'}
+        self.client.force_authentication(user=user)
+
+        #since user model instance is not serializable, use its Id/PK
+        self.bucketlist_data = {'name': 'Go to Ibiza','owner': user.id}
         self.response = self.client.post(
             reverse('create'),
             self.bucketlist_data,
@@ -39,11 +47,17 @@ class ViewTestCase(TestCase):
         """Test the api has bucket creation capability."""
         self.assertEqual(self.response.status_code,status.HTTP_201_CREATED)
 
+    def test_authorization_is_enforced(self):
+        """Test that the api has user authorization."""
+        new_client = APIClient()
+        res = new_client.get('/bucketlists/', kwargs={'pk': 3}, format='json')
+        self.assertEqual(res.status_code, status.HTTP_401_UNAUTHORIZED)
+
     def test_api_can_get_a_bucketlist(self):
         """Test the api can get a given bucketlist."""
-        bucketlist = Bucketlist.objects.get()
+        bucketlist = Bucketlist.objects.get(id=1)
         response = self.client.get(
-            reverse('details',
+            '/bucketlists/',
             kwargs={'pk': bucketlist.id}), format="json")
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -51,6 +65,7 @@ class ViewTestCase(TestCase):
 
     def test_api_can_update_bucketlist(self):
         """Test the api can update a given bucketlist."""
+        bucketlist = Bucketlist.objects.get()
         change_bucketlist = {"name": "Something new"}
         res = self.client.put(
             reverse('details', kwargs={'pk': bucketlist.id}),
